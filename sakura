@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+
+# ─── PATHS ───────────────────────────────────────────────────────
+DIR="$(cd "$(dirname "$0")" && pwd)"
+CORE="$DIR/sakura-cli"
+
+# ─── CHECKS ──────────────────────────────────────────────────────
+command -v gum >/dev/null || { echo "gum is not installed"; exit 1; }
+[ -x "$CORE" ] || { echo "sakura-cli not found or not executable"; exit 1; }
+
+# ─── THEME ───────────────────────────────────────────────────────
+export GUM_THEME_FOREGROUND="#ff79c6"
+export GUM_THEME_BACKGROUND="#0b0b0f"
+export GUM_THEME_SELECTED_FOREGROUND="#0b0b0f"
+export GUM_THEME_SELECTED_BACKGROUND="#ff79c6"
+export GUM_THEME_BORDER_FOREGROUND="#ff79c6"
+export GUM_THEME_CURSOR_FOREGROUND="#ff79c6"
+export GUM_HELP_FOREGROUND="#0b0b0f"
+
+# ─── TERMINAL WIDTH ──────────────────────────────────────────────
+COLS=$(tput cols)
+
+# ─── PERSISTENT OPTIONS ──────────────────────────────────────────
+OPT_QUALITY="best"
+OPT_PLAYER="mpv"
+OPT_MODE="sub"
+OPT_SKIP_INTRO=0
+OPT_NO_DETACH=0
+
+# ─── UI HELPERS ──────────────────────────────────────────────────
+header() {
+  clear
+  for i in {0..4}; do
+    printf "\e[48;2;%d;%d;%dm%*s\e[0m\n" \
+      255 \
+      $((105 + (182 - 105) * i / 4)) \
+      $((180 + (198 - 180) * i / 4)) \
+      "$COLS" ""
+  done
+
+  SAKURA_TEXT=$(cat << "EOF"
+███████╗ █████╗ ██╗  ██╗██╗   ██╗██████╗  █████╗ 
+██╔════╝██╔══██╗██║ ██╔╝██║   ██║██╔══██╗██╔══██╗
+███████╗███████║█████╔╝ ██║   ██║██████╔╝███████║
+╚════██║██╔══██║██╔═██╗ ██║   ██║██╔══██╗██╔══██║
+███████║██║  ██║██║  ██╗╚██████╔╝██║  ██║██║  ██║
+╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
+EOF
+)
+
+  # Braille sakura branch art (trimmed to fit neatly beside header)
+  FLOWER=$(printf "\033[38;2;255;121;198m%s\033[0m" \
+'                        
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⣿⣧⣼⣿⣷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⢀⣀⣀⣀⣰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆⣀⣀⣀⡀⠀⠀⠀
+⠀⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⠀
+⠀⣙⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣋⠀
+⣿⣿⣿⣿⣿⣿⣿⠁⠀⠈⠻⠿⠀⠀⠿⠟⠁⠀⠈⣿⣿⣿⣿⣿⣿⣿
+⠘⢿⣿⣿⣿⣿⣿⣦⣤⣤⣄⡀⠀⠀⢀⣠⣤⣤⣴⣿⣿⣿⣿⣿⡿⠃
+⠀⠀⠙⢿⣿⣿⣿⣿⣿⠿⠋⠀⣠⣄⠀⠙⠿⣿⣿⣿⣿⣿⡿⠋⠀⠀
+⠀⠀⠀⢰⣿⣿⣿⣿⣿⠀⠀⢠⣿⣿⡄⠀⠀⣿⣿⣿⣿⣿⡆⠀⠀⠀
+⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣾⣿⣿⣿⣿⣷⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀
+⠀⠀⠀⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠀⠀⠀
+⠀⠀⠀⠈⠛⠛⣿⣿⣿⣿⣿⡿⠛⠛⢿⣿⣿⣿⣿⣿⠛⠛⠁⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠘⠛⠛⠉⠁⠀⠀⠀⠀⠈⠉⠛⠛⠃⠀⠀⠀⠀⠀⠀ ')
+
+  HEADER_BOX=$(gum style \
+    --border rounded \
+    --align center \
+    --padding "1 2" \
+    --margin "1 0" \
+    --border-foreground "#ff79c6" \
+    --background "#0b0b0f" \
+    "$SAKURA_TEXT
+Anime Player & Downloader")
+
+  FLOWER_STYLED=$(gum style \
+    --align left \
+    --foreground "#ff79c6" \
+    --margin "1 1" \
+    "$FLOWER")
+
+  gum join --align center "$HEADER_BOX" "$FLOWER_STYLED"
+}
+
+status_bar() {
+  local skip_icon="⏭ skip:$([ "$OPT_SKIP_INTRO" = "1" ] && echo ON || echo OFF)"
+  gum style \
+    --border normal \
+    --align center \
+    --padding "0 2" \
+    --border-foreground "#ff79c6" \
+    --foreground "#f8f8f2" \
+    "  🎬 $OPT_PLAYER   |   🎞 $OPT_QUALITY   |   🗣 $OPT_MODE   |   $skip_icon  "
+}
+
+# ─── BUILD FLAGS ─────────────────────────────────────────────────
+build_flags() {
+  FLAGS=""
+  [ "$OPT_PLAYER" = "vlc" ]    && FLAGS="$FLAGS --vlc"
+  [ "$OPT_MODE"   = "dub" ]    && FLAGS="$FLAGS --dub"
+  [ "$OPT_SKIP_INTRO" = "1" ]  && FLAGS="$FLAGS --skip"
+  [ "$OPT_NO_DETACH"  = "1" ]  && FLAGS="$FLAGS --no-detach"
+  [ "$OPT_QUALITY" != "best" ] && FLAGS="$FLAGS -q $OPT_QUALITY"
+}
+
+# ─── ACTIONS ─────────────────────────────────────────────────────
+watch_anime() {
+  while true; do
+    header; status_bar
+    QUERY=$(gum input \
+      --placeholder "Anime title..." \
+      --prompt "❀ Search > " \
+      --width 60) || return
+    [ -z "$QUERY" ] && return
+    build_flags
+    # shellcheck disable=SC2086
+    "$CORE" $FLAGS "$QUERY"
+  done
+}
+
+continue_watching() {
+  header; status_bar
+  build_flags
+  # shellcheck disable=SC2086
+  "$CORE" $FLAGS --continue
+}
+
+download_anime() {
+  while true; do
+    header; status_bar
+    QUERY=$(gum input \
+      --placeholder "Anime title..." \
+      --prompt "❀ Download > " \
+      --width 60) || return
+    [ -z "$QUERY" ] && return
+    build_flags
+    # shellcheck disable=SC2086
+    "$CORE" -d $FLAGS "$QUERY"
+  done
+}
+
+syncplay_anime() {
+  while true; do
+    header; status_bar
+    QUERY=$(gum input \
+      --placeholder "Anime title..." \
+      --prompt "❀ Syncplay > " \
+      --width 60) || return
+    [ -z "$QUERY" ] && return
+    build_flags
+    # shellcheck disable=SC2086
+    "$CORE" -s $FLAGS "$QUERY"
+  done
+}
+
+show_status_check() {
+  while true; do
+    header
+    QUERY=$(gum input \
+      --placeholder "Anime title..." \
+      --prompt "❀ Status > " \
+      --width 60) || return
+    [ -z "$QUERY" ] && return
+    "$CORE" --nextep-countdown "$QUERY"
+    echo ""
+    gum confirm "Check another?" || return
+  done
+}
+
+view_history() {
+  header
+  gum style --foreground "#ff79c6" --bold "  Watch History"
+  echo ""
+  "$CORE" --logview
+  echo ""
+  CHOICE=$(gum choose \
+    --cursor "❀ " \
+    "← Back" \
+    "🗑 Delete History") || return
+  case "$CHOICE" in
+    "🗑 Delete History")
+      gum confirm "Delete ALL history?" && "$CORE" --delete
+      ;;
+  esac
+}
+
+play_downloads() {
+  header
+  status_bar
+  build_flags
+  # shellcheck disable=SC2086
+  "$CORE" $FLAGS --local
+}
+
+settings_menu() {
+  while true; do
+    header
+    echo ""
+    gum style \
+      --border rounded \
+      --padding "0 2" \
+      --border-foreground "#ff79c6" \
+      --foreground "#f8f8f2" \
+      "Player     : $OPT_PLAYER
+Quality    : $OPT_QUALITY
+Mode       : $OPT_MODE
+Skip Intro : $([ "$OPT_SKIP_INTRO" = "1" ] && echo ON || echo OFF)
+No Detach  : $([ "$OPT_NO_DETACH"  = "1" ] && echo ON || echo OFF)"
+    echo ""
+    SETTING=$(gum choose \
+      --cursor "❀ " \
+      "🎬 Player  [$OPT_PLAYER]" \
+      "🎞 Quality [$OPT_QUALITY]" \
+      "🗣 Mode    [$OPT_MODE]" \
+      "⏭ Skip Intro [$([ "$OPT_SKIP_INTRO" = "1" ] && echo ON || echo OFF)]" \
+      "📌 No Detach [$([ "$OPT_NO_DETACH" = "1" ] && echo ON || echo OFF)]" \
+      "← Back") || return
+    case "$SETTING" in
+      "🎬 Player"*)
+        OPT_PLAYER=$(gum choose --cursor "❀ " "mpv" "vlc") || true ;;
+      "🎞 Quality"*)
+        OPT_QUALITY=$(gum choose --cursor "❀ " "best" "1080p" "720p" "480p" "360p" "worst") || true ;;
+      "🗣 Mode"*)
+        OPT_MODE=$(gum choose --cursor "❀ " "sub" "dub") || true ;;
+      "⏭ Skip Intro"*)
+        [ "$OPT_SKIP_INTRO" = "1" ] && OPT_SKIP_INTRO=0 || OPT_SKIP_INTRO=1 ;;
+      "📌 No Detach"*)
+        [ "$OPT_NO_DETACH" = "1" ] && OPT_NO_DETACH=0 || OPT_NO_DETACH=1 ;;
+      "← Back") return ;;
+    esac
+  done
+}
+
+# ─── MAIN MENU ───────────────────────────────────────────────────
+while true; do
+  header
+  status_bar
+  echo ""
+
+  CHOICE=$(gum choose \
+    --cursor "❀ " \
+    "▶  Watch Anime" \
+    "↺  Continue Watching" \
+    "⬇  Download Anime" \
+    "📂 Play Downloads" \
+    "🔗 Watch with Syncplay" \
+    "⏰ Show Status Check" \
+    "📜 History & Logs" \
+    "⚙  Settings" \
+    "❌  Exit") || { clear; exit; }
+
+  case "$CHOICE" in
+    "▶  Watch Anime")          watch_anime ;;
+    "↺  Continue Watching")   continue_watching ;;
+    "⬇  Download Anime")      download_anime ;;
+    "📂 Play Downloads")      play_downloads ;;
+    "🔗 Watch with Syncplay")  syncplay_anime ;;
+    "⏰ Show Status Check")    show_status_check ;;
+    "📜 History & Logs")       view_history ;;
+    "⚙  Settings")            settings_menu ;;
+    "❌  Exit")                clear; exit ;;
+  esac
+done

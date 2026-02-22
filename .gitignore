@@ -1,0 +1,21 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# Local state / history (optional; uncomment if you don’t want to track)
+sakura-hsts
+*.log
+*.sakura_history
+
+# Build / temp
+*.tmp
+*.temp
+*.bak
