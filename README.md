@@ -38,7 +38,7 @@ A terminal-based anime player and downloader. Sakura adds an interactive TUI wra
 
 ## Configuration
 
-sakura-cli respects these environment variables (replace `ani-cli` defaults with sakura-cli naming):
+sakura-cli respects these environment variables:
 
 - `SAKURA_CLI_MODE` – `sub` or `dub`
 - `SAKURA_CLI_PLAYER` – e.g. `mpv`, `vlc`
