@@ -534,7 +534,11 @@ case "$search" in
         abs_download_dir=$(cd "$download_dir" 2>/dev/null && pwd) || die "Download directory not found: $download_dir"
         file_list=$(find "$abs_download_dir" -maxdepth 1 -type f \( -name "*.mp4" -o -name "*.mkv" \) 2>/dev/null | sort)
         [ -z "$file_list" ] && die "No downloaded videos found in $download_dir"
-        selected=$(printf '%s\n' "$file_list" | launcher "" "Select download: ")
+                # Use " " so launcher does not set +m (multi-select); we only play one file
+        selected=$(printf '%s\n' "$file_list" | launcher " " "Select download: ")
+        [ -z "$selected" ] && exit 0
+        # Trim whitespace/newlines so -f test and player get a valid path
+        selected=$(printf '%s' "$selected" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
         [ -z "$selected" ] && exit 0
         play_local_file "$selected"
         exit 0
