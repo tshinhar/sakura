@@ -362,8 +362,6 @@ play_local_file() {
         mpv*)
             if [ "$no_detach" = 0 ]; then
                 player_function="mpv"
-                echo "$path"
-                echo "$player_function"
                 nohup $player_function "$path" >/dev/null 2>&1 &
             else
                 $player_function "$path"
