@@ -10,7 +10,7 @@ A terminal-based anime player and downloader. Sakura adds an interactive TUI wra
 ## Requirements
 
 - **sakura (TUI):** `gum`, and `sakura-cli` in the same directory
-- **sakura-cli:** `curl`, `sed`, `grep`, `fzf`; a video player (e.g. `mpv`, VLC, or IINA on macOS); optionally `rofi`, `ani-skip`, `yt-dlp`/`ffmpeg`/`aria2c` for downloads
+- **sakura-cli:** `curl`, `sed`, `grep`, `fzf`, `openssl` (on Termux, the CLI is in the `openssl-tool` package); a video player (e.g. `mpv`, VLC, or IINA on macOS); optionally `rofi`, `ani-skip`, `yt-dlp`/`ffmpeg`/`aria2c` for downloads
 
 ## Installation
 
