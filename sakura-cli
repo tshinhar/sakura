@@ -518,6 +518,46 @@ play() {
     [ "$player_function" != "debug" ] && [ "$player_function" != "download" ] && tput rc && tput ed
 }
 
+get_dynamic_allanime_key() {
+    # Default fallback key (currently SHA-256 of 'Xot36i3lK3:v1')
+    local fallback_key="a254aa27c410f297bd04ba33a0c0df7ff4e706bf3ae27271c6703f84e750f552"
+    local ani_cli_url="https://raw.githubusercontent.com/pystardust/ani-cli/master/ani-cli"
+    local ani_cli_content
+    
+    # Fetch with a short timeout so we don't hang if offline
+    ani_cli_content=$(curl -s --connect-timeout 3 --max-time 5 "$ani_cli_url")
+    if [ $? -ne 0 ] || [ -z "$ani_cli_content" ]; then
+        echo "$fallback_key"
+        return 0
+    fi
+
+    local key_line
+    key_line=$(printf '%s' "$ani_cli_content" | grep -E '^allanime_key=')
+    if [ -z "$key_line" ]; then
+        echo "$fallback_key"
+        return 0
+    fi
+
+    local val
+    # Try to extract single-quoted seed inside printf '%s' '...'
+    if printf '%s' "$key_line" | grep -q "printf '%s'"; then
+        val=$(printf '%s' "$key_line" | sed -nE "s|.*printf '%s' '([^']*)'.*|\1|p")
+    else
+        # Otherwise, extract whatever is inside the outermost double or single quotes
+        val=$(printf '%s' "$key_line" | sed -nE 's|^allanime_key=["'\''\$\(]*([^"'\''\)]*).*|\1|p')
+    fi
+
+    if [ -n "$val" ]; then
+        if printf '%s' "$val" | grep -qE '^[0-9a-fA-F]{64}$'; then
+            echo "$val"
+        else
+            printf '%s' "$val" | openssl dgst -sha256 -binary | od -A n -t x1 | tr -d ' \n'
+        fi
+    else
+        echo "$fallback_key"
+    fi
+}
+
 # MAIN
 
 # setup
@@ -525,7 +565,7 @@ agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefo
 allanime_refr="https://youtu-chan.com"
 allanime_base="allanime.day"
 allanime_api="https://api.${allanime_base}"
-allanime_key="22196fa6afca95309fdabe9a3534b87cd2454e50efeabfcbdbdfd3de678b3982"
+allanime_key="$(get_dynamic_allanime_key)"
 
 cleanup_shit() {
     [ "$player_function" = "android_mpv" ] && [ -w "/storage/emulated/0/mpv/mpv.config.mp4" ] && : >"/storage/emulated/0/mpv/mpv.config.mp4"
