@@ -254,21 +254,14 @@ process_response() {
         return 0
     fi
 
-    printf '%s' "$1" | sed -nE 's|.*"tobeparsed":"([^"]*)".*|\1|p' | node -e "
-const crypto = require('crypto');
-const key = Buffer.from('$allanime_key', 'hex');
-let d = '';
-process.stdin.on('data', c => d += c);
-process.stdin.on('end', () => {
-  const raw = Buffer.from(d.trim(), 'base64');
-  const iv = raw.subarray(1, 13);
-  const ct = raw.subarray(13, -16);
-  const tag = raw.subarray(-16);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(tag);
-  process.stdout.write(Buffer.concat([decipher.update(ct), decipher.final()]));
-});
-" 2>/dev/null
+    tmp="$(mktemp)"
+    printf '%s' "$1" | sed -nE 's|.*"tobeparsed":"([^"]*)".*|\1|p' | base64 -d >"$tmp"
+    file_size="$(wc -c <"$tmp")"
+    iv="$(dd if="$tmp" bs=1 skip=1 count=12 2>/dev/null | od -A n -t x1 | tr -d ' \n')"
+    ctr="${iv}00000002"
+    ct_len=$((file_size - 13 - 16))
+    dd if="$tmp" bs=1 skip=13 count="$ct_len" 2>/dev/null | openssl enc -d -aes-256-ctr -K "$allanime_key" -iv "$ctr" -nosalt -nopad 2>/dev/null
+    rm -f "$tmp"
 }
 
 get_filemoon_links() {
@@ -305,16 +298,16 @@ get_episode_url() {
     #shellcheck disable=SC2016
     episode_embed_gql='query ($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) { episode( showId: $showId translationType: $translationType episodeString: $episodeString ) { episodeString sourceUrls }}'
 
-    #shellcheck disable=SC2016
-    query_hash="d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec"
     query_vars="{\"showId\":\"$id\",\"translationType\":\"$mode\",\"episodeString\":\"$ep_no\"}"
     query_ext="$(node -e "
 const crypto = require('crypto');
 const key = Buffer.from('$allanime_key', 'hex');
-const qh = '$query_hash';
+const qh = '$allanime_query_hash';
 const ts = Math.floor(Date.now() / 300000) * 300000;
-const payload = JSON.stringify({v:1,ts:ts,epoch:4128,buildId:'9',qh:qh});
-const iv = crypto.createHash('sha256').update('4128:9:'+qh+':'+ts).digest().subarray(0,12);
+const epoch = $allanime_epoch;
+const buildId = '$allanime_build_id';
+const payload = JSON.stringify({v:1,ts:ts,epoch:epoch,buildId:buildId,qh:qh});
+const iv = crypto.createHash('sha256').update(epoch+':'+buildId+':'+qh+':'+ts).digest().subarray(0,12);
 const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 const ct = Buffer.concat([cipher.update(payload), cipher.final()]);
 const tag = cipher.getAuthTag();
@@ -322,7 +315,11 @@ const aareq = Buffer.concat([Buffer.from([1]), iv, ct, tag]).toString('base64');
 console.log(JSON.stringify({persistedQuery:{version:1,sha256Hash:qh},aaReq:aareq}));
 ")"
 
-    api_resp="$(curl -e "$allanime_refr" -sG -A "$agent" -H "Origin: ${allanime_refr}" "${allanime_api}/api" --data-urlencode "variables=${query_vars}" --data-urlencode "extensions=${query_ext}")"
+    api_resp="$(curl -e "$allanime_refr" -sG -A "$agent" -H "Origin: ${allanime_refr}" -H "x-build-id: $allanime_build_id" "${allanime_api}/api" --data-urlencode "variables=${query_vars}" --data-urlencode "extensions=${query_ext}")"
+
+    if [ -z "$api_resp" ] || ! printf "%s" "$api_resp" | grep -q "tobeparsed"; then
+        api_resp="$(curl -e "$allanime_refr" -s -H "Content-Type: application/json" -X POST "${allanime_api}/api" --data "{\"variables\":{\"showId\":\"$id\",\"translationType\":\"$mode\",\"episodeString\":\"$ep_no\"},\"query\":\"$episode_embed_gql\"}" -A "$agent")"
+    fi
 
     resp="$(process_response "$api_resp" | tr '{}' '\n' | sed 's|\\u002F|\/|g;s|\\||g' | sed -nE 's|.*sourceUrl":"([^"]*)".*sourceName":"([^"]*)".*|\2 :\1|p')"
 
@@ -518,44 +515,55 @@ play() {
     [ "$player_function" != "debug" ] && [ "$player_function" != "download" ] && tput rc && tput ed
 }
 
-get_dynamic_allanime_key() {
-    # Default fallback key (currently SHA-256 of 'Xot36i3lK3:v1')
+setup_dynamic_allanime_vars() {
     local fallback_key="a254aa27c410f297bd04ba33a0c0df7ff4e706bf3ae27271c6703f84e750f552"
-    local ani_cli_url="https://raw.githubusercontent.com/pystardust/ani-cli/master/ani-cli"
+    local fallback_hash="d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec"
+    local fallback_epoch=4128
+    local fallback_build_id="9"
+    
+    local ani_cli_url="https://raw.githubusercontent.com/pystardust/ani-cli/fix/ani-cli"
     local ani_cli_content
     
-    # Fetch with a short timeout so we don't hang if offline
     ani_cli_content=$(curl -s --connect-timeout 3 --max-time 5 "$ani_cli_url")
     if [ $? -ne 0 ] || [ -z "$ani_cli_content" ]; then
-        echo "$fallback_key"
+        allanime_key="$fallback_key"
+        allanime_query_hash="$fallback_hash"
+        allanime_epoch="$fallback_epoch"
+        allanime_build_id="$fallback_build_id"
         return 0
     fi
 
+    # Extract allanime_key
     local key_line
     key_line=$(printf '%s' "$ani_cli_content" | grep -E '^allanime_key=')
-    if [ -z "$key_line" ]; then
-        echo "$fallback_key"
-        return 0
-    fi
-
-    local val
-    # Try to extract single-quoted seed inside printf '%s' '...'
-    if printf '%s' "$key_line" | grep -q "printf '%s'"; then
-        val=$(printf '%s' "$key_line" | sed -nE "s|.*printf '%s' '([^']*)'.*|\1|p")
-    else
-        # Otherwise, extract whatever is inside the outermost double or single quotes
-        val=$(printf '%s' "$key_line" | sed -nE 's|^allanime_key=["'\''\$\(]*([^"'\''\)]*).*|\1|p')
-    fi
-
-    if [ -n "$val" ]; then
-        if printf '%s' "$val" | grep -qE '^[0-9a-fA-F]{64}$'; then
-            echo "$val"
+    if [ -n "$key_line" ]; then
+        local val
+        if printf '%s' "$key_line" | grep -q "printf '%s'"; then
+            val=$(printf '%s' "$key_line" | sed -nE "s|.*printf '%s' '([^']*)'.*|\1|p")
         else
-            printf '%s' "$val" | openssl dgst -sha256 -binary | od -A n -t x1 | tr -d ' \n'
+            val=$(printf '%s' "$key_line" | sed -nE 's|^allanime_key=["'\''\$\(]*([^"'\''\)]*).*|\1|p')
         fi
-    else
-        echo "$fallback_key"
+        if [ -n "$val" ]; then
+            if printf '%s' "$val" | grep -qE '^[0-9a-fA-F]{64}$'; then
+                allanime_key="$val"
+            else
+                allanime_key=$(printf '%s' "$val" | openssl dgst -sha256 -binary | od -A n -t x1 | tr -d ' \n')
+            fi
+        fi
     fi
+    [ -z "$allanime_key" ] && allanime_key="$fallback_key"
+
+    # Extract query_hash
+    allanime_query_hash=$(printf '%s' "$ani_cli_content" | sed -nE 's|^allanime_query_hash="([^"]+)".*|\1|p' | head -n1)
+    [ -z "$allanime_query_hash" ] && allanime_query_hash="$fallback_hash"
+
+    # Extract epoch
+    allanime_epoch=$(printf '%s' "$ani_cli_content" | sed -nE 's|^allanime_epoch=([0-9]+).*|\1|p' | head -n1)
+    [ -z "$allanime_epoch" ] && allanime_epoch="$fallback_epoch"
+
+    # Extract build_id
+    allanime_build_id=$(printf '%s' "$ani_cli_content" | sed -nE 's|^allanime_build_id="?([^"]+)"?.*|\1|p' | head -n1)
+    [ -z "$allanime_build_id" ] && allanime_build_id="$fallback_build_id"
 }
 
 # MAIN
@@ -565,7 +573,7 @@ agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:150.0) Gecko/20100101 Firefo
 allanime_refr="https://youtu-chan.com"
 allanime_base="allanime.day"
 allanime_api="https://api.${allanime_base}"
-allanime_key="$(get_dynamic_allanime_key)"
+setup_dynamic_allanime_vars
 
 cleanup_shit() {
     [ "$player_function" = "android_mpv" ] && [ -w "/storage/emulated/0/mpv/mpv.config.mp4" ] && : >"/storage/emulated/0/mpv/mpv.config.mp4"
