@@ -315,7 +315,7 @@ const aareq = Buffer.concat([Buffer.from([1]), iv, ct, tag]).toString('base64');
 console.log(JSON.stringify({persistedQuery:{version:1,sha256Hash:qh},aaReq:aareq}));
 ")"
 
-    api_resp="$(curl -e "$allanime_refr" -sG -A "$agent" -H "Origin: ${allanime_refr}" -H "x-build-id: $allanime_build_id" "${allanime_api}/api" --data-urlencode "variables=${query_vars}" --data-urlencode "extensions=${query_ext}")"
+    api_resp="$(curl -e "$allanime_refr" -sG -A "$agent" -H "Origin: https://mkissa.to" -H "x-build-id: ${allanime_build_id:-50}" "${allanime_api}/api" --data-urlencode "variables=${query_vars}" --data-urlencode "extensions=${query_ext}")"
 
     if [ -z "$api_resp" ] || ! printf "%s" "$api_resp" | grep -q "tobeparsed"; then
         api_resp="$(curl -e "$allanime_refr" -s -H "Content-Type: application/json" -X POST "${allanime_api}/api" --data "{\"variables\":{\"showId\":\"$id\",\"translationType\":\"$mode\",\"episodeString\":\"$ep_no\"},\"query\":\"$episode_embed_gql\"}" -A "$agent")"
@@ -516,10 +516,10 @@ play() {
 }
 
 setup_dynamic_allanime_vars() {
-    local fallback_key="a254aa27c410f297bd04ba33a0c0df7ff4e706bf3ae27271c6703f84e750f552"
+    local fallback_key="f34fa715e2958b8c1ebc6efa4d089acd8f196d8b83d4b6201586c00c8a52e4a8"
     local fallback_hash="d405d0edd690624b66baba3068e0edc3ac90f1597d898a1ec8db4e5c43c00fec"
-    local fallback_epoch=4128
-    local fallback_build_id="9"
+    local fallback_epoch=6884
+    local fallback_build_id="50"
     
     local ani_cli_url="https://raw.githubusercontent.com/pystardust/ani-cli/fix/ani-cli"
     local ani_cli_content
