@@ -599,10 +599,10 @@ generate_mask() {
     trap 'rm -f "$tmp"' EXIT HUP INT TERM
 
     cat >"$tmp" <<'EOF'
-12eJyE2wzfY=
-nWIlTqF9f5E=
-7f6CmXtAgpY=
-oR/792BJ+Sc=
+O1c1LQKxjeA=
+czMdvsR/WAM=
+KElSgK/l8jM=
+Q7wraL6U5Tg=
 EOF
 
     key_hex=""
