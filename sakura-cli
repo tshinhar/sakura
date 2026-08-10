@@ -624,9 +624,11 @@ case "$search" in
         [ -z "${index##*[!0-9]*}" ] && id=$(printf "%s" "$anime_list" | nl -w 2 | sed 's/^[[:space:]]//' | nth "Select anime: " | cut -f1)
         [ -z "${index##*[!0-9]*}" ] || id=$(printf "%s" "$anime_list" | sed -n "${index}p" | cut -f1)
         [ -z "$id" ] && exit 1
-        title=$(printf "%s" "$anime_list" | grep "$id" | cut -f2 | sed 's/ - episode.*//')
-        ep_list=$(anidb_episodes "$id" | cut -f 2)
-        ep_no=$(printf "%s" "$anime_list" | grep "$id" | cut -f2 | sed -nE 's/.*- episode (.+)$/\1/p')
+        title=$(printf "%s" "$anime_list" | grep "$id" | cut -f 2 | sed 's/ - episode.*//')
+        anidb_desc "$id" || true
+        episode_maps="$(anidb_episodes "$id")"
+        ep_list="$(printf '%s' "$episode_maps" | cut -f 2)"
+        ep_no=$(printf "%s" "$anime_list" | grep "$id" | cut -f 2 | sed -nE 's/.*- episode (.+)$/\1/p')
         allanime_title="$(printf "%s" "$title" | cut -d'(' -f1 | tr -d '[:punct:]')"
         ;;
     *)
