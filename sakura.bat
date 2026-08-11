@@ -17,8 +17,15 @@ if not defined SAKURA (
 )
 
 if not defined SAKURA (
+    if exist "%SCRIPT_DIR%sakura-main\sakura" (
+        if not exist "%SCRIPT_DIR%sakura-main\sakura\" (
+            set "SAKURA=%SCRIPT_DIR%sakura-main\sakura"
+        )
+    )
+)
+
+if not defined SAKURA (
     echo sakura not found
-    pause
     exit /b 1
 )
 
